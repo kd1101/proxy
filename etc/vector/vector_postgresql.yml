@@ -1,0 +1,108 @@
+data_dir: /var/lib/vector
+
+###############################################################################
+# Sources
+###############################################################################
+
+sources:
+  squid:
+    type: file
+
+    include:
+      - /var/log/squid/access.log
+
+    # Read existing log on the first startup.
+    # Afterwards Vector will continue from the saved checkpoint.
+    read_from: beginning
+
+###############################################################################
+# Transforms
+###############################################################################
+
+transforms:
+  squid_parse:
+    type: remap
+
+    inputs:
+      - squid
+
+    source: |
+      # Split Squid log into 10 fields.
+      fields = split(string!(.message), "|", 10)
+
+      # Validate log format.
+      assert!(
+        length(fields) == 10,
+        message: "Invalid Squid log format"
+      )
+
+      # Convert Unix timestamp with millisecond precision.
+      unix_seconds = to_float!(get!(fields, [0]))
+      unix_milliseconds = to_int(round(unix_seconds * 1000.0))
+
+      occurred_at = from_unix_timestamp!(
+        unix_milliseconds,
+        unit: "milliseconds"
+      )
+
+      # Parse hierarchy information.
+      hierarchy = string!(get!(fields, [9]))
+      hierarchy_parts = split(hierarchy, "/", 2)
+
+      hierarchy_type = get(hierarchy_parts, [0]) ?? ""
+      upstream_ip = get(hierarchy_parts, [1]) ?? ""
+
+      # Squid uses "-" when authentication is unavailable.
+      username = string!(get!(fields, [2]))
+      if username == "-" {
+        username = null
+      }
+
+      # Squid uses "-" when no upstream server exists.
+      if upstream_ip == "-" || upstream_ip == "" {
+        upstream_ip = null
+      }
+
+      # Build a clean event matching the PostgreSQL schema.
+      . = {
+        "occurred_at": occurred_at,
+        "client_ip": string!(get!(fields, [1])),
+        "username": username,
+        "method": string!(get!(fields, [3])),
+        "url": string!(get!(fields, [4])),
+        "http_status": to_int!(get!(fields, [5])),
+        "squid_status": string!(get!(fields, [6])),
+        "bytes_sent": to_int!(get!(fields, [7])),
+        "duration_ms": to_int!(get!(fields, [8])),
+        "hierarchy_type": hierarchy_type,
+        "upstream_ip": upstream_ip,
+        "inserted_at": now()
+      }
+
+###############################################################################
+# Sinks
+###############################################################################
+
+sinks:
+  postgres:
+    type: postgres
+
+    inputs:
+      - squid_parse
+
+    # PostgreSQL connection string.
+    endpoint: "postgres://squid_vector:${SQUID_VECTOR_PASSWORD}@postgresql:5432/squid"
+
+    # Destination table.
+    table: squid_access_log
+
+    # Flush every second or after 100 events.
+    batch:
+      timeout_secs: 1
+      max_events: 100
+
+    # Use a disk buffer to avoid losing events if PostgreSQL is unavailable.
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block

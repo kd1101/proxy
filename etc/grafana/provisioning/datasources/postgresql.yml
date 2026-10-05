@@ -1,0 +1,21 @@
+apiVersion: 1
+
+prune: true
+
+datasources:
+  - name: Squid PostgreSQL
+    uid: squid-postgresql
+    type: postgres
+    access: proxy
+    url: postgresql:5432
+    user: squid_grafana
+    database: squid
+    isDefault: true
+    editable: false
+    secureJsonData:
+      password: $SQUID_GRAFANA_PASSWORD
+    jsonData:
+      database: squid
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: false

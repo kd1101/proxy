@@ -1,0 +1,58 @@
+#
+# Squid URL blacklist
+#
+
+#
+# File sharing services
+#
+
+# Yandex Disk
+(^|\.)disk\.yandex\.(ru|com)$
+(^|\.)yadi\.sk$
+
+# Mail.ru Cloud
+(^|\.)cloud\.mail\.ru$
+
+# Google Drive
+(^|\.)drive\.google\.com$
+(^|\.)docs\.google\.com$
+(^|\.)docs\.googleusercontent\.com$
+
+# Other file sharing services
+(^|\.)mega\.nz$
+(^|\.)mediafire\.com$
+(^|\.)wetransfer\.com$
+(^|\.)dropbox\.com$
+(^|\.)dropboxusercontent\.com$
+(^|\.)sendspace\.com$
+(^|\.)filemail\.com$
+(^|\.)transfernow\.net$
+(^|\.)gofile\.io$
+(^|\.)pixeldrain\.com$
+(^|\.)1fichier\.com$
+(^|\.)workupload\.com$
+
+
+#
+# Anonymizers
+#
+
+
+#
+# VPN services
+#
+
+
+#
+# Cryptocurrency
+#
+
+
+#
+# Malware
+#
+
+
+#
+# Advertising
+#

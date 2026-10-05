@@ -1,0 +1,4 @@
+.env
+/data/
+/var/
+/etc/squid/*.keytab

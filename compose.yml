@@ -1,0 +1,96 @@
+services:
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    hostname: nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - grafana
+    volumes:
+      - ./etc/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./etc/nginx/pac:/etc/nginx/pac:ro
+
+  squid:
+    image: ${SQUID_IMAGE:-ubuntu/squid:latest}
+    restart: unless-stopped
+    hostname: proxy
+    ports:
+      - "3128:3128"
+
+    # Optional custom Kerberos configuration (currently not used).
+    # environment:
+    #   KRB5_CONFIG: /etc/squid/krb5.conf
+    #   KRB5RCACHEDIR: /var/spool/squid
+
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        chown proxy:proxy /var/log/squid /var/spool/squid
+        exec /usr/sbin/squid -N -f /etc/squid/squid.conf
+    volumes:
+      - ./etc/squid:/etc/squid:ro
+      # Reserved for the quota helper; quotas are currently disabled.
+      # - ./etc/squid/helpers:/usr/local/libexec:ro
+      - ./var/log/squid:/var/log/squid
+      - ./data/squid:/var/spool/squid
+
+  vector:
+    image: ${VECTOR_IMAGE:-timberio/vector:latest-debian}
+    restart: unless-stopped
+    hostname: vector
+    # Squid log permissions vary by image; narrow this after fixing UID/GID.
+    user: "0:0"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      SQUID_VECTOR_PASSWORD: ${SQUID_VECTOR_PASSWORD:?Set SQUID_VECTOR_PASSWORD in .env}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        exec vector --config /etc/vector/vector_postgresql.yml >> /var/log/vector/vector.log 2>&1
+    volumes:
+      - ./etc/vector:/etc/vector:ro
+      - ./var/log/squid:/var/log/squid:ro
+      - ./var/log/vector:/var/log/vector
+      - ./data/vector:/var/lib/vector
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana:latest}
+    restart: unless-stopped
+    user: "${GRAFANA_UID:-1000}:${GRAFANA_GID:-1000}"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      GF_SERVER_DOMAIN: grafana.example.com
+      GF_SERVER_ROOT_URL: http://grafana.example.com
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      SQUID_GRAFANA_PASSWORD: ${SQUID_GRAFANA_PASSWORD:?Set SQUID_GRAFANA_PASSWORD in .env}
+    volumes:
+      - ./etc/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./etc/grafana/dashboards:/var/lib/grafana-dashboards:ro
+      - ./data/grafana:/var/lib/grafana
+
+  postgresql:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    hostname: postgres
+    environment:
+      POSTGRES_DB: squid
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SQUID_VECTOR_PASSWORD: ${SQUID_VECTOR_PASSWORD:?Set SQUID_VECTOR_PASSWORD in .env}
+      SQUID_GRAFANA_PASSWORD: ${SQUID_GRAFANA_PASSWORD:?Set SQUID_GRAFANA_PASSWORD in .env}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d squid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - ./etc/postgresql/initdb:/docker-entrypoint-initdb.d:ro
+      - ./data/postgresql:/var/lib/postgresql/data

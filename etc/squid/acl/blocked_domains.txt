@@ -1,0 +1,17 @@
+.disk.yandex.ru
+.yadi.sk
+.drive.google.com
+.docs.google.com
+.docs.googleusercontent.com
+.mega.nz
+.mediafire.com
+.wetransfer.com
+.dropbox.com
+.dropboxusercontent.com
+.sendspace.com
+.filemail.com
+.transfernow.net
+.gofile.io
+.pixeldrain.com
+.1fichier.com
+.workupload.com
